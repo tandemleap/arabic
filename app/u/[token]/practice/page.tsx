@@ -19,10 +19,39 @@ const SCENARIOS = [
   { id: 'hidden', label: '🗺️ Off the map', description: 'Asking a local where people actually go around here.' },
 ]
 
-// Extract the first Arabic script block from Youssef's message to speak aloud
+const SPEEDS = [
+  { label: 'Slow', value: '0.6' },
+  { label: 'Normal', value: '0.9' },
+  { label: 'Fast', value: '1.2' },
+]
+
+// Extract Arabic from inside parentheses first, then any Arabic block
 function extractArabic(text: string): string | null {
-  const match = text.match(/[\u0600-\u06FF\s،؟!]+/)
-  return match ? match[0].trim() : null
+  const inParens = text.match(/\(([^)]*[\u0600-\u06FF][^)]*)\)/)
+  if (inParens) return inParens[1].trim()
+  const block = text.match(/[\u0600-\u06FF][^\u0000-\u007F\s]*(?:\s+[\u0600-\u06FF][^\u0000-\u007F\s]*)*/)
+  return block ? block[0].trim() : null
+}
+
+// Parse a Youssef message into clickable lines
+function parseYoussefMessage(text: string, onSpeak: (arabic: string) => void) {
+  return text.split('\n').map((line, i) => {
+    const arabic = extractArabic(line)
+    if (arabic && line.includes('(')) {
+      return (
+        <button
+          key={i}
+          onClick={() => onSpeak(arabic)}
+          className="block w-full text-left hover:bg-stone-700/50 rounded-lg px-2 py-0.5 -mx-2 transition-colors group"
+          title="Tap to hear this line"
+        >
+          <span>{line}</span>
+          <span className="ml-1 opacity-0 group-hover:opacity-100 text-amber-400 text-xs transition-opacity">🔈</span>
+        </button>
+      )
+    }
+    return <span key={i} className="block">{line || '\u00A0'}</span>
+  })
 }
 
 export default function PracticePage() {
@@ -35,8 +64,10 @@ export default function PracticePage() {
   const [listening, setListening] = useState(false)
   const [micLang, setMicLang] = useState<'ar' | 'en-US'>('en-US')
   const [micError, setMicError] = useState('')
+  const [speed, setSpeed] = useState('0.9')
   const stopListeningRef = useRef<(() => void) | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const prevLoadingRef = useRef(false)
 
   useEffect(() => {
     const user = getUser(token)
@@ -47,14 +78,17 @@ export default function PracticePage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Auto-speak Youssef's latest response
+  // Auto-speak Youssef's response only when streaming finishes
   useEffect(() => {
-    const last = messages[messages.length - 1]
-    if (last?.role === 'assistant' && last.content && !loading) {
-      const arabic = extractArabic(last.content)
-      if (arabic) speakArabic(arabic, '0.75')
+    if (prevLoadingRef.current && !loading) {
+      const last = messages[messages.length - 1]
+      if (last?.role === 'assistant' && last.content) {
+        const arabic = extractArabic(last.content)
+        if (arabic) speakArabic(arabic, speed)
+      }
     }
-  }, [messages, loading])
+    prevLoadingRef.current = loading
+  }, [loading, messages, speed])
 
   async function startScenario(scenarioId: string) {
     setScenario(scenarioId)
@@ -107,22 +141,16 @@ export default function PracticePage() {
     }
     setListening(true)
     const stop = startListening(
-      (transcript) => {
-        setInput(transcript)
-        setListening(false)
-      },
+      (transcript) => { setInput(transcript); setListening(false) },
       (err) => {
         setListening(false)
         if (err === 'not-allowed') setMicError('Mic permission denied — check browser settings')
-        else if (err === 'not-supported') setMicError('Mic not supported in this browser — try Safari')
+        else if (err === 'not-supported') setMicError('Try Safari or Chrome')
         else setMicError(`Mic error: ${err}`)
       },
       micLang
     )
-    if (!stop) {
-      setListening(false)
-      setMicError('Speech recognition not supported — try Safari or Chrome')
-    }
+    if (!stop) { setListening(false); setMicError('Speech recognition not supported — try Safari or Chrome') }
     stopListeningRef.current = stop
   }, [listening, micLang])
 
@@ -141,7 +169,7 @@ export default function PracticePage() {
         </div>
         <div className="max-w-sm mx-auto px-4 pt-6 space-y-3">
           <p className="text-stone-400 text-sm">
-            You&apos;ll chat with Youssef — a warm Moroccan local. He responds in Darija with translations, speaks his lines aloud, and listens when you tap the mic. He won&apos;t judge, and he loves a good laugh.
+            Chat with Youssef — a warm Moroccan local. He speaks his lines aloud. Tap any Darija line to hear it again. Use the mic to practice speaking back.
           </p>
           <div className="space-y-2 pt-2">
             {SCENARIOS.map(s => (
@@ -166,18 +194,40 @@ export default function PracticePage() {
     <main className="min-h-screen bg-stone-950 text-stone-100 flex flex-col">
       {/* Header */}
       <div className="bg-stone-900 border-b border-stone-800 px-4 py-3 shrink-0">
-        <div className="max-w-sm mx-auto flex items-center gap-3">
-          <button onClick={() => setScenario(null)} className="text-stone-400 hover:text-stone-200">←</button>
-          <div className="flex-1">
-            <div className="font-semibold text-stone-100">{currentScenario?.label}</div>
-            <div className="text-xs text-stone-500">Chatting with Youssef 🔊</div>
+        <div className="max-w-sm mx-auto space-y-2">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setScenario(null)} className="text-stone-400 hover:text-stone-200">←</button>
+            <div className="flex-1">
+              <div className="font-semibold text-stone-100">{currentScenario?.label}</div>
+              <div className="text-xs text-stone-500">Tap any Darija line to hear it again</div>
+            </div>
+            <button
+              onClick={() => { setScenario(null); setMessages([]) }}
+              className="text-xs text-stone-500 hover:text-stone-300 border border-stone-700 rounded-lg px-2 py-1"
+            >
+              New
+            </button>
           </div>
-          <button
-            onClick={() => { setScenario(null); setMessages([]) }}
-            className="text-xs text-stone-500 hover:text-stone-300 border border-stone-700 rounded-lg px-2 py-1"
-          >
-            New
-          </button>
+
+          {/* Speed control */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-stone-500">Speed:</span>
+            <div className="flex gap-1">
+              {SPEEDS.map(s => (
+                <button
+                  key={s.value}
+                  onClick={() => setSpeed(s.value)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    speed === s.value
+                      ? 'bg-amber-500 border-amber-500 text-stone-950 font-semibold'
+                      : 'border-stone-700 text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -186,12 +236,17 @@ export default function PracticePage() {
         <div className="max-w-sm mx-auto space-y-4">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
+              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
                 msg.role === 'user'
-                  ? 'bg-amber-500 text-stone-950 rounded-br-sm'
+                  ? 'bg-amber-500 text-stone-950 rounded-br-sm whitespace-pre-wrap'
                   : 'bg-stone-800 text-stone-100 rounded-bl-sm'
               }`}>
-                {msg.content || (loading && i === messages.length - 1 ? '...' : '')}
+                {msg.role === 'user'
+                  ? msg.content
+                  : msg.content
+                    ? parseYoussefMessage(msg.content, (arabic) => speakArabic(arabic, speed))
+                    : (loading && i === messages.length - 1 ? '...' : '')
+                }
               </div>
             </div>
           ))}
@@ -209,16 +264,11 @@ export default function PracticePage() {
       {/* Input */}
       <div className="shrink-0 bg-stone-900 border-t border-stone-800 px-4 py-3">
         <div className="max-w-sm mx-auto space-y-2">
-
-          {/* Mic language toggle + error */}
           <div className="flex items-center justify-between">
-            {micError ? (
-              <span className="text-xs text-red-400">{micError}</span>
-            ) : (
-              <span className="text-xs text-stone-600">
-                {listening ? '🔴 Listening — tap mic to stop' : ''}
-              </span>
-            )}
+            {micError
+              ? <span className="text-xs text-red-400">{micError}</span>
+              : <span className="text-xs text-stone-600">{listening ? '🔴 Listening — tap mic to stop' : ''}</span>
+            }
             <button
               onClick={() => setMicLang(l => l === 'ar' ? 'en-US' : 'ar')}
               className="text-xs border border-stone-700 rounded-full px-2 py-0.5 text-stone-400 hover:text-stone-200 transition-colors ml-auto"
@@ -228,7 +278,6 @@ export default function PracticePage() {
           </div>
 
           <div className="flex gap-2">
-            {/* Mic button — always visible */}
             <button
               onClick={handleMic}
               className={`rounded-xl px-3 py-2.5 font-bold transition-all text-lg ${
@@ -236,11 +285,9 @@ export default function PracticePage() {
                   ? 'bg-red-600 hover:bg-red-500 text-white scale-110'
                   : 'bg-stone-700 hover:bg-stone-600 text-stone-200'
               }`}
-              title={listening ? 'Tap to stop' : 'Tap to speak'}
             >
               🎤
             </button>
-
             <input
               type="text"
               value={input}
@@ -249,7 +296,6 @@ export default function PracticePage() {
               placeholder={listening ? 'Listening...' : 'Type or tap 🎤 to speak...'}
               className="flex-1 bg-stone-800 border border-stone-700 rounded-xl px-4 py-2.5 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 text-sm"
             />
-
             <button
               onClick={sendMessage}
               disabled={!input.trim() || loading}

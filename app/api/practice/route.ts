@@ -28,11 +28,16 @@ export async function POST(req: Request) {
     ? `${SYSTEM_PROMPT}\n\nCurrent scenario: ${scenario}. Set the scene briefly in your first message.`
     : SYSTEM_PROMPT
 
+  // Anthropic requires at least one message — seed with a start prompt if empty
+  const msgs = messages.length > 0
+    ? messages
+    : [{ role: 'user', content: 'Start the scenario.' }]
+
   const stream = client.messages.stream({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 500,
     system: systemWithScenario,
-    messages,
+    messages: msgs,
   })
 
   const encoder = new TextEncoder()
