@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { categories, Phrase } from '@/data/phrases'
 import { getProgress, setPhrasStatus } from '@/lib/progress'
 import { PhraseStatus } from '@/data/phrases'
-import { speakArabic } from '@/lib/speech'
+import { speakArabic, startListening } from '@/lib/speech'
 
 type CardFace = 'english' | 'arabic'
 
@@ -22,6 +22,8 @@ export default function CategoryPage() {
   const [showMnemonic, setShowMnemonic] = useState(false)
   const [done, setDone] = useState(false)
   const [speaking, setSpeaking] = useState(false)
+  const [listening, setListening] = useState(false)
+  const [heard, setHeard] = useState<string | null>(null)
 
   useEffect(() => {
     if (!category) { router.push('/'); return }
@@ -39,6 +41,7 @@ export default function CategoryPage() {
   // Auto-speak when card flips to Arabic
   useEffect(() => {
     if (flipped && currentPhrase?.arabic) {
+      setHeard(null)
       handleSpeak(currentPhrase.arabic)
     }
   }, [flipped, currentPhrase?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -49,12 +52,32 @@ export default function CategoryPage() {
     setTimeout(() => setSpeaking(false), 2000)
   }
 
+  function handleMic() {
+    if (listening) {
+      setListening(false)
+      return
+    }
+    setHeard(null)
+    setListening(true)
+    startListening(
+      (transcript) => {
+        setHeard(transcript)
+        setListening(false)
+      },
+      () => {
+        setListening(false)
+      },
+      'ar'
+    )
+  }
+
   const handleStatus = useCallback((status: PhraseStatus) => {
     if (!currentPhrase) return
     setPhrasStatus(token, currentPhrase.id, status)
     setProgress(prev => ({ ...prev, [currentPhrase.id]: status }))
     setFlipped(false)
     setShowMnemonic(false)
+    setHeard(null)
     if (index + 1 >= phrases.length) {
       setDone(true)
     } else {
@@ -161,9 +184,10 @@ export default function CategoryPage() {
             )}
           </button>
 
-          {/* Speaker button — shown after flip */}
-          {flipped && currentPhrase?.arabic && (
-            <div className="flex justify-center">
+          {/* Audio + Mic row — shown after flip */}
+          {flipped && (
+            <div className="flex gap-2 justify-center">
+              {/* Hear it */}
               <button
                 onClick={(e) => { e.stopPropagation(); handleSpeak(currentPhrase.arabic) }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
@@ -173,8 +197,32 @@ export default function CategoryPage() {
                 }`}
               >
                 <span>{speaking ? '🔊' : '🔈'}</span>
-                <span>{speaking ? 'Playing...' : 'Hear it again'}</span>
+                <span>{speaking ? 'Playing...' : 'Hear it'}</span>
               </button>
+
+              {/* Say it */}
+              <button
+                onClick={handleMic}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                  listening
+                    ? 'bg-red-600/20 text-red-400 border-red-500/50 scale-105'
+                    : 'bg-stone-800 text-stone-400 hover:text-stone-200 border-stone-700'
+                }`}
+              >
+                <span>🎤</span>
+                <span>{listening ? 'Listening...' : 'Say it'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Pronunciation feedback */}
+          {heard !== null && (
+            <div className="bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-center space-y-1">
+              <div className="text-xs text-stone-500 uppercase tracking-widest">I heard</div>
+              <div className="text-lg font-medium text-stone-100" dir="rtl">{heard}</div>
+              <div className="text-xs text-stone-500">
+                Compare with: <span className="text-amber-400">{currentPhrase?.romanized}</span>
+              </div>
             </div>
           )}
 
