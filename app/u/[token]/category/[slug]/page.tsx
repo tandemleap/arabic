@@ -24,7 +24,7 @@ export default function CategoryPage() {
   const [speaking, setSpeaking] = useState(false)
   type MicState = 'idle' | 'recording' | 'scoring'
   const [micState, setMicState] = useState<MicState>('idle')
-  const [assessment, setAssessment] = useState<{ score: number; accuracy: number; fluency: number; error?: string } | null>(null)
+  const [assessment, setAssessment] = useState<{ score: number; accuracy: number; fluency: number; recognized?: string; error?: string } | null>(null)
   const stopRecordingRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -256,6 +256,11 @@ export default function CategoryPage() {
                     <span>Accuracy: <span className="text-stone-300">{assessment.accuracy}</span></span>
                     <span>Fluency: <span className="text-stone-300">{assessment.fluency}</span></span>
                   </div>
+                  {assessment.recognized && (
+                    <div className="text-xs text-stone-500">
+                      Heard: <span className="text-stone-400" dir="rtl">{assessment.recognized}</span>
+                    </div>
+                  )}
                 </>
               )}
             </div>

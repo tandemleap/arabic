@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   const audioBuffer = await audio.arrayBuffer()
 
   const response = await fetch(
-    `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=ar-SA&format=detailed`,
+    `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=ar-MA&format=detailed`,
     {
       method: 'POST',
       headers: {
