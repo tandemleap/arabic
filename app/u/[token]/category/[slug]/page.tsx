@@ -24,7 +24,7 @@ export default function CategoryPage() {
   const [speaking, setSpeaking] = useState(false)
   type MicState = 'idle' | 'recording' | 'scoring'
   const [micState, setMicState] = useState<MicState>('idle')
-  const [assessment, setAssessment] = useState<{ score: number; accuracy: number; fluency: number } | null>(null)
+  const [assessment, setAssessment] = useState<{ score: number; accuracy: number; fluency: number; error?: string } | null>(null)
   const stopRecordingRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -70,11 +70,15 @@ export default function CategoryPage() {
         form.append('text', currentPhrase.arabic)
         form.append('mimeType', mimeType)
         const res = await fetch('/api/pronounce', { method: 'POST', body: form })
+        const data = await res.json()
         if (res.ok) {
-          const data = await res.json()
           setAssessment(data)
+        } else {
+          setAssessment({ score: 0, accuracy: 0, fluency: 0, error: data.detail || data.error || 'Scoring failed' })
         }
-      } catch { /* ignore */ }
+      } catch (e) {
+        setAssessment({ score: 0, accuracy: 0, fluency: 0, error: String(e) })
+      }
       setMicState('idle')
     }).then(stop => {
       if (!stop) { setMicState('idle'); return }
@@ -231,23 +235,29 @@ export default function CategoryPage() {
           {/* Pronunciation feedback */}
           {assessment !== null && (
             <div className="bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-center space-y-2">
-              <div className={`text-3xl font-bold ${
-                assessment.score >= 85 ? 'text-green-400' :
-                assessment.score >= 60 ? 'text-amber-400' : 'text-red-400'
-              }`}>
-                {assessment.score}/100
-              </div>
-              <div className={`text-sm font-semibold ${
-                assessment.score >= 85 ? 'text-green-400' :
-                assessment.score >= 60 ? 'text-amber-400' : 'text-red-400'
-              }`}>
-                {assessment.score >= 85 ? 'Great pronunciation!' :
-                 assessment.score >= 60 ? 'Pretty close!' : 'Keep practicing!'}
-              </div>
-              <div className="flex justify-center gap-4 text-xs text-stone-500">
-                <span>Accuracy: <span className="text-stone-300">{assessment.accuracy}</span></span>
-                <span>Fluency: <span className="text-stone-300">{assessment.fluency}</span></span>
-              </div>
+              {assessment.error ? (
+                <div className="text-sm text-red-400">{assessment.error}</div>
+              ) : (
+                <>
+                  <div className={`text-3xl font-bold ${
+                    assessment.score >= 85 ? 'text-green-400' :
+                    assessment.score >= 60 ? 'text-amber-400' : 'text-red-400'
+                  }`}>
+                    {assessment.score}/100
+                  </div>
+                  <div className={`text-sm font-semibold ${
+                    assessment.score >= 85 ? 'text-green-400' :
+                    assessment.score >= 60 ? 'text-amber-400' : 'text-red-400'
+                  }`}>
+                    {assessment.score >= 85 ? 'Great pronunciation!' :
+                     assessment.score >= 60 ? 'Pretty close!' : 'Keep practicing!'}
+                  </div>
+                  <div className="flex justify-center gap-4 text-xs text-stone-500">
+                    <span>Accuracy: <span className="text-stone-300">{assessment.accuracy}</span></span>
+                    <span>Fluency: <span className="text-stone-300">{assessment.fluency}</span></span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
