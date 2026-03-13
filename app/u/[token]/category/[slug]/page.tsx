@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { categories, Phrase } from '@/data/phrases'
 import { getProgress, setPhrasStatus } from '@/lib/progress'
 import { PhraseStatus } from '@/data/phrases'
-import { speakById, startListening } from '@/lib/speech'
+import { speakById, startRecording } from '@/lib/speech'
 
 type CardFace = 'english' | 'arabic'
 
@@ -22,8 +22,10 @@ export default function CategoryPage() {
   const [showMnemonic, setShowMnemonic] = useState(false)
   const [done, setDone] = useState(false)
   const [speaking, setSpeaking] = useState(false)
-  const [listening, setListening] = useState(false)
-  const [heard, setHeard] = useState<string | null>(null)
+  type MicState = 'idle' | 'recording' | 'scoring'
+  const [micState, setMicState] = useState<MicState>('idle')
+  const [assessment, setAssessment] = useState<{ score: number; accuracy: number; fluency: number } | null>(null)
+  const stopRecordingRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!category) { router.push('/'); return }
@@ -41,7 +43,7 @@ export default function CategoryPage() {
   // Auto-speak when card flips to Arabic
   useEffect(() => {
     if (flipped && currentPhrase?.arabic) {
-      setHeard(null)
+      setAssessment(null)
       handleSpeak(currentPhrase.id, currentPhrase.arabic)
     }
   }, [flipped, currentPhrase?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -53,22 +55,31 @@ export default function CategoryPage() {
   }
 
   function handleMic() {
-    if (listening) {
-      setListening(false)
+    if (micState === 'recording') {
+      stopRecordingRef.current?.()
       return
     }
-    setHeard(null)
-    setListening(true)
-    startListening(
-      (transcript) => {
-        setHeard(transcript)
-        setListening(false)
-      },
-      () => {
-        setListening(false)
-      },
-      'ar'
-    )
+    setAssessment(null)
+    setMicState('recording')
+    startRecording(async (blob, mimeType) => {
+      if (!blob || blob.size === 0) { setMicState('idle'); return }
+      setMicState('scoring')
+      try {
+        const form = new FormData()
+        form.append('audio', blob)
+        form.append('text', currentPhrase.arabic)
+        form.append('mimeType', mimeType)
+        const res = await fetch('/api/pronounce', { method: 'POST', body: form })
+        if (res.ok) {
+          const data = await res.json()
+          setAssessment(data)
+        }
+      } catch { /* ignore */ }
+      setMicState('idle')
+    }).then(stop => {
+      if (!stop) { setMicState('idle'); return }
+      stopRecordingRef.current = stop
+    })
   }
 
   const handleStatus = useCallback((status: PhraseStatus) => {
@@ -77,7 +88,7 @@ export default function CategoryPage() {
     setProgress(prev => ({ ...prev, [currentPhrase.id]: status }))
     setFlipped(false)
     setShowMnemonic(false)
-    setHeard(null)
+    setAssessment(null)
     if (index + 1 >= phrases.length) {
       setDone(true)
     } else {
@@ -204,24 +215,38 @@ export default function CategoryPage() {
               <button
                 onClick={handleMic}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                  listening
+                  micState === 'recording'
                     ? 'bg-red-600/20 text-red-400 border-red-500/50 scale-105'
+                    : micState === 'scoring'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/50'
                     : 'bg-stone-800 text-stone-400 hover:text-stone-200 border-stone-700'
                 }`}
               >
                 <span>🎤</span>
-                <span>{listening ? 'Listening...' : 'Say it'}</span>
+                <span>{micState === 'recording' ? 'Stop' : micState === 'scoring' ? 'Scoring...' : 'Say it'}</span>
               </button>
             </div>
           )}
 
           {/* Pronunciation feedback */}
-          {heard !== null && (
-            <div className="bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-center space-y-1">
-              <div className="text-xs text-stone-500 uppercase tracking-widest">I heard</div>
-              <div className="text-lg font-medium text-stone-100" dir="rtl">{heard}</div>
-              <div className="text-xs text-stone-500">
-                Compare with: <span className="text-amber-400">{currentPhrase?.romanized}</span>
+          {assessment !== null && (
+            <div className="bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-center space-y-2">
+              <div className={`text-3xl font-bold ${
+                assessment.score >= 85 ? 'text-green-400' :
+                assessment.score >= 60 ? 'text-amber-400' : 'text-red-400'
+              }`}>
+                {assessment.score}/100
+              </div>
+              <div className={`text-sm font-semibold ${
+                assessment.score >= 85 ? 'text-green-400' :
+                assessment.score >= 60 ? 'text-amber-400' : 'text-red-400'
+              }`}>
+                {assessment.score >= 85 ? 'Great pronunciation!' :
+                 assessment.score >= 60 ? 'Pretty close!' : 'Keep practicing!'}
+              </div>
+              <div className="flex justify-center gap-4 text-xs text-stone-500">
+                <span>Accuracy: <span className="text-stone-300">{assessment.accuracy}</span></span>
+                <span>Fluency: <span className="text-stone-300">{assessment.fluency}</span></span>
               </div>
             </div>
           )}

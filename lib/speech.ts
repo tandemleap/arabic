@@ -66,6 +66,44 @@ export function stopSpeaking() {
   }
 }
 
+// Record audio — returns a stop function. Call stop() to end recording and get the blob via onBlob.
+export async function startRecording(
+  onBlob: (blob: Blob | null, mimeType: string) => void
+): Promise<(() => void) | null> {
+  if (typeof window === 'undefined') return null
+
+  let stream: MediaStream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch {
+    return null
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/webm')
+    ? 'audio/webm'
+    : 'audio/mp4'
+
+  const recorder = new MediaRecorder(stream, { mimeType })
+  const chunks: Blob[] = []
+
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data)
+  }
+
+  recorder.start()
+
+  return () => {
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(chunks, { type: mimeType })
+      onBlob(blob, mimeType)
+    }
+    if (recorder.state !== 'inactive') recorder.stop()
+  }
+}
+
 // Browser fallback (used if Azure not configured)
 function fallbackSpeak(text: string) {
   if (!window.speechSynthesis) return
