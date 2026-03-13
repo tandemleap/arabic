@@ -15,6 +15,17 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Missing audio or text' }, { status: 400 })
   }
 
+  // Exchange key for bearer token
+  const tokenRes = await fetch(
+    `https://${region}.api.cognitive.microsoft.com/sts/v1.0/issueToken`,
+    { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key } }
+  )
+  if (!tokenRes.ok) {
+    const t = await tokenRes.text()
+    return Response.json({ error: `Token exchange ${tokenRes.status}: ${t || 'failed'}` }, { status: 401 })
+  }
+  const token = await tokenRes.text()
+
   const assessmentConfig = {
     ReferenceText: referenceText,
     GradingSystem: 'HundredMark',
@@ -29,7 +40,7 @@ export async function POST(req: Request) {
     {
       method: 'POST',
       headers: {
-        'Ocp-Apim-Subscription-Key': key,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': mimeType,
         'Pronunciation-Assessment': assessmentHeader,
       },
