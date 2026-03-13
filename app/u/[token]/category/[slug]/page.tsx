@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { categories, Phrase } from '@/data/phrases'
 import { getProgress, setPhrasStatus } from '@/lib/progress'
 import { PhraseStatus } from '@/data/phrases'
-import { speakArabic, startListening } from '@/lib/speech'
+import { speakById, startListening } from '@/lib/speech'
 
 type CardFace = 'english' | 'arabic'
 
@@ -42,13 +42,13 @@ export default function CategoryPage() {
   useEffect(() => {
     if (flipped && currentPhrase?.arabic) {
       setHeard(null)
-      handleSpeak(currentPhrase.arabic)
+      handleSpeak(currentPhrase.id, currentPhrase.arabic)
     }
   }, [flipped, currentPhrase?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleSpeak(arabic: string) {
+  function handleSpeak(id: string, arabic: string) {
     setSpeaking(true)
-    speakArabic(arabic)
+    speakById(id, arabic)
     setTimeout(() => setSpeaking(false), 2000)
   }
 
@@ -189,7 +189,7 @@ export default function CategoryPage() {
             <div className="flex gap-2 justify-center">
               {/* Hear it */}
               <button
-                onClick={(e) => { e.stopPropagation(); handleSpeak(currentPhrase.arabic) }}
+                onClick={(e) => { e.stopPropagation(); handleSpeak(currentPhrase.id, currentPhrase.arabic) }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   speaking
                     ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'

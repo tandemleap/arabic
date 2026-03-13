@@ -1,5 +1,27 @@
 let currentAudio: HTMLAudioElement | null = null
 
+// Speak by phrase ID — plays local MP3 if available, falls back to Azure TTS
+export async function speakById(id: string, fallbackText: string, rate = '0.85') {
+  if (typeof window === 'undefined') return
+
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+  }
+
+  const audio = new Audio(`/audio/${id}.mp3`)
+  currentAudio = audio
+
+  try {
+    await audio.play()
+    audio.onended = () => { currentAudio = null }
+  } catch {
+    // Local MP3 not found or failed — fall back to Azure TTS
+    currentAudio = null
+    speakArabic(fallbackText, rate)
+  }
+}
+
 // Speak Arabic text via Azure TTS (ar-MA-JamalNeural — Moroccan Arabic)
 export async function speakArabic(text: string, rate = '0.85') {
   if (typeof window === 'undefined') return
