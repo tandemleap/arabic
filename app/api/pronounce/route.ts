@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   const audioBuffer = await audio.arrayBuffer()
 
   const response = await fetch(
-    `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=ar-MA&format=detailed`,
+    `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=ar-SA&format=detailed`,
     {
       method: 'POST',
       headers: {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
   if (!response.ok) {
     const errText = await response.text()
-    return Response.json({ error: 'Assessment failed', detail: errText }, { status: response.status })
+    return Response.json({ error: `Azure ${response.status}: ${errText || 'no detail'}` }, { status: response.status })
   }
 
   const data = await response.json()
