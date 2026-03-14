@@ -93,6 +93,8 @@ export async function startRecording(
   source.connect(processor)
   processor.connect(audioContext.destination)
 
+  const actualSampleRate = audioContext.sampleRate
+
   return () => {
     processor.disconnect()
     source.disconnect()
@@ -109,7 +111,7 @@ export async function startRecording(
       pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * 32767)))
     }
 
-    onBlob(new Blob([encodeWav(pcm16, 16000)], { type: 'audio/wav' }), 'audio/wav')
+    onBlob(new Blob([encodeWav(pcm16, actualSampleRate)], { type: 'audio/wav' }), 'audio/wav')
   }
 }
 

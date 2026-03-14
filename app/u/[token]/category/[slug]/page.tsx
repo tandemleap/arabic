@@ -87,6 +87,7 @@ export default function CategoryPage() {
         const res = await fetch('/api/pronounce', { method: 'POST', body: form })
         const data = await res.json()
         if (res.ok) {
+          console.log('Pronounce response:', data)
           setAssessment(data)
         } else {
           setAssessment({ score: 0, accuracy: 0, fluency: 0, error: data.detail || data.error || 'Scoring failed' })
