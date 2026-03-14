@@ -55,16 +55,11 @@ export async function POST(req: Request) {
 
   const data = await response.json()
   const best = data.NBest?.[0]
-  const assessment = best?.PronunciationAssessment
-
-  // Log full response to diagnose score issues
-  console.log('Azure STT response:', JSON.stringify(data, null, 2))
 
   return Response.json({
-    score: Math.round(assessment?.PronScore ?? 0),
-    accuracy: Math.round(assessment?.AccuracyScore ?? 0),
-    fluency: Math.round(assessment?.FluencyScore ?? 0),
+    score: Math.round(best?.PronScore ?? 0),
+    accuracy: Math.round(best?.AccuracyScore ?? 0),
+    fluency: Math.round(best?.FluencyScore ?? 0),
     recognized: data.DisplayText ?? '',
-    _debug: { best, assessment },
   })
 }
