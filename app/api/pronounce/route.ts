@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': mimeType,
+        'Content-Type': 'audio/wav',
         'Pronunciation-Assessment': assessmentHeader,
       },
       body: audioBuffer,
@@ -54,12 +54,17 @@ export async function POST(req: Request) {
   }
 
   const data = await response.json()
-  const assessment = data.NBest?.[0]?.PronunciationAssessment
+  const best = data.NBest?.[0]
+  const assessment = best?.PronunciationAssessment
+
+  // Log full response to diagnose score issues
+  console.log('Azure STT response:', JSON.stringify(data, null, 2))
 
   return Response.json({
     score: Math.round(assessment?.PronScore ?? 0),
     accuracy: Math.round(assessment?.AccuracyScore ?? 0),
     fluency: Math.round(assessment?.FluencyScore ?? 0),
     recognized: data.DisplayText ?? '',
+    _debug: { best, assessment },
   })
 }

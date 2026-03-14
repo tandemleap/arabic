@@ -66,7 +66,7 @@ export function stopSpeaking() {
   }
 }
 
-// Record audio — returns a stop function. Call stop() to end recording and get the blob via onBlob.
+// Record audio as WAV (PCM 16-bit 16kHz mono) — required for Azure Pronunciation Assessment scoring.
 export async function startRecording(
   onBlob: (blob: Blob | null, mimeType: string) => void
 ): Promise<(() => void) | null> {
@@ -79,29 +79,52 @@ export async function startRecording(
     return null
   }
 
-  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus'
-    : MediaRecorder.isTypeSupported('audio/webm')
-    ? 'audio/webm'
-    : 'audio/mp4'
+  const audioContext = new AudioContext({ sampleRate: 16000 })
+  const source = audioContext.createMediaStreamSource(stream)
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
+  const processor = audioContext.createScriptProcessor(4096, 1, 1)
+  const pcmChunks: Float32Array[] = []
 
-  const recorder = new MediaRecorder(stream, { mimeType })
-  const chunks: Blob[] = []
-
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data)
+  processor.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0)
+    pcmChunks.push(new Float32Array(input))
   }
 
-  recorder.start()
+  source.connect(processor)
+  processor.connect(audioContext.destination)
 
   return () => {
-    recorder.onstop = () => {
-      stream.getTracks().forEach(t => t.stop())
-      const blob = new Blob(chunks, { type: mimeType })
-      onBlob(blob, mimeType)
+    processor.disconnect()
+    source.disconnect()
+    stream.getTracks().forEach(t => t.stop())
+    audioContext.close()
+
+    const totalLen = pcmChunks.reduce((s, c) => s + c.length, 0)
+    const pcm = new Float32Array(totalLen)
+    let offset = 0
+    for (const chunk of pcmChunks) { pcm.set(chunk, offset); offset += chunk.length }
+
+    const pcm16 = new Int16Array(pcm.length)
+    for (let i = 0; i < pcm.length; i++) {
+      pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * 32767)))
     }
-    if (recorder.state !== 'inactive') recorder.stop()
+
+    onBlob(new Blob([encodeWav(pcm16, 16000)], { type: 'audio/wav' }), 'audio/wav')
   }
+}
+
+function encodeWav(samples: Int16Array, sampleRate: number): ArrayBuffer {
+  const buf = new ArrayBuffer(44 + samples.length * 2)
+  const v = new DataView(buf)
+  const str = (off: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)) }
+  str(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true)
+  str(8, 'WAVE'); str(12, 'fmt ')
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true)
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true)
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true)
+  str(36, 'data'); v.setUint32(40, samples.length * 2, true)
+  for (let i = 0; i < samples.length; i++) v.setInt16(44 + i * 2, samples[i], true)
+  return buf
 }
 
 // Browser fallback (used if Azure not configured)
