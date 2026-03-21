@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { categories, tierOrder, tierLabels, Category } from '@/data/phrases'
-import { getUser, getCategoryProgress } from '@/lib/progress'
+import { getUser, getCategoryProgress, getStarred } from '@/lib/progress'
 
 export default function Dashboard() {
   const { token } = useParams<{ token: string }>()
   const router = useRouter()
   const [name, setName] = useState('')
   const [categoryProgress, setCategoryProgress] = useState<Record<string, { pct: number; gotIt: number; total: number }>>({})
+  const [starredCount, setStarredCount] = useState(0)
 
   useEffect(() => {
     const user = getUser(token)
@@ -24,6 +25,7 @@ export default function Dashboard() {
       prog[cat.slug] = getCategoryProgress(token, cat.phrases.map(p => p.id))
     }
     setCategoryProgress(prog)
+    setStarredCount(getStarred(token).size)
   }, [token, router])
 
   const totalPhrases = categories.reduce((sum, c) => sum + c.phrases.length, 0)
@@ -121,6 +123,20 @@ export default function Dashboard() {
             </div>
           </div>
         ))}
+
+        {/* Keepers */}
+        <Link href={`/u/${token}/keepers`}>
+          <div className="bg-amber-900/20 hover:bg-amber-900/30 border border-amber-700/40 rounded-xl p-4 flex items-center gap-3 transition-colors">
+            <span className="text-2xl">★</span>
+            <div className="flex-1">
+              <div className="font-semibold text-amber-300">Keepers</div>
+              <div className="text-xs text-stone-500">
+                {starredCount === 0 ? 'Star cards to drill your favourites' : `${starredCount} phrase${starredCount === 1 ? '' : 's'} starred`}
+              </div>
+            </div>
+            <span className="text-amber-400">→</span>
+          </div>
+        </Link>
 
         {/* Practice button */}
         <Link href={`/u/${token}/practice`}>

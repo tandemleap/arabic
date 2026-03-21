@@ -12,6 +12,7 @@ export interface Progress {
 
 const USERS_KEY = 'morocco_users'
 const PROGRESS_PREFIX = 'morocco_progress_'
+const STARRED_PREFIX = 'morocco_starred_'
 
 export function getUser(token: string): UserProfile | null {
   if (typeof window === 'undefined') return null
@@ -51,6 +52,23 @@ export function getCategoryProgress(token: string, phraseIds: string[]) {
   const gotIt = phraseIds.filter(id => progress[id] === 'got-it').length
   const learning = phraseIds.filter(id => progress[id] === 'learning').length
   return { total, gotIt, learning, pct: total > 0 ? Math.round((gotIt / total) * 100) : 0 }
+}
+
+export function getStarred(token: string): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  const raw = localStorage.getItem(STARRED_PREFIX + token)
+  return new Set(JSON.parse(raw || '[]'))
+}
+
+export function toggleStar(token: string, phraseId: string): boolean {
+  const starred = getStarred(token)
+  if (starred.has(phraseId)) {
+    starred.delete(phraseId)
+  } else {
+    starred.add(phraseId)
+  }
+  localStorage.setItem(STARRED_PREFIX + token, JSON.stringify([...starred]))
+  return starred.has(phraseId)
 }
 
 function generateToken(name: string): string {
