@@ -7,19 +7,17 @@ import { getProgress, setPhrasStatus, getStarred, toggleStar } from '@/lib/progr
 import { PhraseStatus } from '@/data/phrases'
 import { speakById, startRecording } from '@/lib/speech'
 
-type CardFace = 'english' | 'arabic'
 type StudyMode = 'learn' | 'flashcard'
 
-export default function CategoryPage() {
-  const { token, slug } = useParams<{ token: string; slug: string }>()
+export default function KeepersPage() {
+  const { token } = useParams<{ token: string }>()
   const router = useRouter()
-  const category = categories.find(c => c.slug === slug)
 
   const [phrases, setPhrases] = useState<Phrase[]>([])
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
-  const [startFace] = useState<CardFace>('english')
   const [progress, setProgress] = useState<Record<string, PhraseStatus>>({})
+  const [starred, setStarred] = useState<Set<string>>(new Set())
   const [showMnemonic, setShowMnemonic] = useState(false)
   const [done, setDone] = useState(false)
   const [speaking, setSpeaking] = useState(false)
@@ -33,22 +31,17 @@ export default function CategoryPage() {
   const [micState, setMicState] = useState<MicState>('idle')
   const [assessment, setAssessment] = useState<{ score: number; accuracy: number; fluency: number; recognized?: string; error?: string } | null>(null)
   const stopRecordingRef = useRef<(() => void) | null>(null)
-  const [starred, setStarred] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    setStarred(getStarred(token))
-  }, [token])
-
-  useEffect(() => {
-    if (!category) { router.push('/'); return }
+    const s = getStarred(token)
+    setStarred(s)
+    const allPhrases = categories.flatMap(c => c.phrases)
     const p = getProgress(token)
     setProgress(p)
-    const sorted = [...category.phrases].sort((a, b) => {
-      const order = { 'new': 0, 'learning': 1, 'got-it': 2 }
-      return (order[p[a.id] || 'new']) - (order[p[b.id] || 'new'])
-    })
-    setPhrases(sorted)
-  }, [category, token, router])
+    const kept = allPhrases.filter(ph => s.has(ph.id))
+    setPhrases(kept)
+    if (kept.length === 0) setDone(true)
+  }, [token])
 
   const currentPhrase = phrases[index]
 
@@ -72,6 +65,26 @@ export default function CategoryPage() {
     setSpeaking(true)
     speakById(id, arabic)
     setTimeout(() => setSpeaking(false), 2000)
+  }
+
+  function handleStar() {
+    if (!currentPhrase) return
+    toggleStar(token, currentPhrase.id)
+    const updated = getStarred(token)
+    setStarred(updated)
+    // Remove from current list if unstarred
+    if (!updated.has(currentPhrase.id)) {
+      const next = phrases.filter(p => p.id !== currentPhrase.id)
+      setPhrases(next)
+      if (next.length === 0) {
+        setDone(true)
+      } else if (index >= next.length) {
+        setIndex(next.length - 1)
+      }
+      setFlipped(false)
+      setShowMnemonic(false)
+      setAssessment(null)
+    }
   }
 
   function handleMic() {
@@ -106,12 +119,6 @@ export default function CategoryPage() {
     })
   }
 
-  function handleStar() {
-    if (!currentPhrase) return
-    toggleStar(token, currentPhrase.id)
-    setStarred(getStarred(token))
-  }
-
   function toggleMode() {
     const next: StudyMode = mode === 'learn' ? 'flashcard' : 'learn'
     setMode(next)
@@ -135,8 +142,6 @@ export default function CategoryPage() {
     }
   }, [currentPhrase, token, index, phrases.length])
 
-  if (!category) return null
-
   const gotItCount = phrases.filter(p => progress[p.id] === 'got-it').length
   const pct = phrases.length > 0 ? Math.round((gotItCount / phrases.length) * 100) : 0
 
@@ -144,22 +149,24 @@ export default function CategoryPage() {
     return (
       <main className="min-h-screen bg-stone-950 text-stone-100 flex flex-col items-center justify-center p-6">
         <div className="text-center space-y-4 max-w-sm">
-          <div className="text-6xl">{pct === 100 ? '🎉' : '✅'}</div>
+          <div className="text-6xl">{phrases.length === 0 ? '☆' : '🌟'}</div>
           <h2 className="text-2xl font-bold text-amber-400">
-            {pct === 100 ? 'Mzyan bzzaf!' : 'Good round!'}
+            {phrases.length === 0 ? 'No keepers yet' : 'Round complete!'}
           </h2>
           <p className="text-stone-400">
-            {pct === 100
-              ? `You've got all ${phrases.length} phrases in ${category.title}.`
-              : `${gotItCount} of ${phrases.length} phrases locked in.`}
+            {phrases.length === 0
+              ? 'Star phrases on any card to add them here.'
+              : `${gotItCount} of ${phrases.length} keepers locked in.`}
           </p>
           <div className="flex gap-3 justify-center pt-4">
-            <button
-              onClick={() => { setIndex(0); setDone(false); setFlipped(false) }}
-              className="bg-stone-800 hover:bg-stone-700 border border-stone-700 rounded-xl px-5 py-3 text-sm font-semibold transition-colors"
-            >
-              Go Again
-            </button>
+            {phrases.length > 0 && (
+              <button
+                onClick={() => { setIndex(0); setDone(false); setFlipped(false) }}
+                className="bg-stone-800 hover:bg-stone-700 border border-stone-700 rounded-xl px-5 py-3 text-sm font-semibold transition-colors"
+              >
+                Go Again
+              </button>
+            )}
             <button
               onClick={() => router.push(`/u/${token}`)}
               className="bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-xl px-5 py-3 text-sm font-semibold transition-colors"
@@ -181,7 +188,7 @@ export default function CategoryPage() {
             ←
           </button>
           <div className="flex-1">
-            <div className="text-sm font-semibold text-stone-100">{category.icon} {category.title}</div>
+            <div className="text-sm font-semibold text-stone-100">★ Keepers</div>
             <div className="text-xs text-stone-500">{index + 1} / {phrases.length} · {gotItCount} got it</div>
           </div>
           {/* Mode toggle */}
@@ -208,10 +215,10 @@ export default function CategoryPage() {
           <div className="flex justify-end">
             <button
               onClick={handleStar}
-              className={`text-2xl transition-transform active:scale-90 ${starred.has(currentPhrase?.id) ? 'text-amber-400' : 'text-stone-400 hover:text-stone-200'}`}
-              title={starred.has(currentPhrase?.id) ? 'Remove from Keepers' : 'Add to Keepers'}
+              className="text-2xl text-amber-400 transition-transform active:scale-90"
+              title="Remove from Keepers"
             >
-              {starred.has(currentPhrase?.id) ? '★' : '☆'}
+              ★
             </button>
           </div>
 
@@ -226,15 +233,7 @@ export default function CategoryPage() {
             </div>
           )}
 
-          {/* Bonus badge */}
-          {currentPhrase?.bonus && (
-            <div className="text-center">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-400">✨ Surprise Phrase</span>
-            </div>
-          )}
-
           {mode === 'learn' ? (
-            /* ── LEARN MODE: everything visible, no flip ── */
             <>
               <div className="w-full bg-stone-800 border border-stone-700 rounded-2xl p-8 text-center space-y-3 min-h-[220px] flex flex-col items-center justify-center">
                 <div className="text-stone-400 text-sm font-medium">{currentPhrase?.english}</div>
@@ -244,7 +243,6 @@ export default function CategoryPage() {
                 <div className="text-xl text-stone-200 font-semibold">{currentPhrase?.romanized}</div>
               </div>
 
-              {/* Hear it / Say it */}
               <div className="flex gap-2 justify-center">
                 <button
                   onClick={() => handleSpeak(currentPhrase.id, currentPhrase.arabic)}
@@ -273,7 +271,6 @@ export default function CategoryPage() {
                 </button>
               </div>
 
-              {/* Pronunciation feedback */}
               {assessment !== null && (
                 <div className="bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-center space-y-2">
                   {assessment.error ? (
@@ -307,7 +304,6 @@ export default function CategoryPage() {
                 </div>
               )}
 
-              {/* Mnemonic */}
               {currentPhrase?.mnemonic && (
                 <button
                   onClick={() => setShowMnemonic(m => !m)}
@@ -321,7 +317,6 @@ export default function CategoryPage() {
                 </button>
               )}
 
-              {/* Still Learning / Got It */}
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   onClick={() => handleStatus('learning')}
@@ -338,7 +333,6 @@ export default function CategoryPage() {
               </div>
             </>
           ) : (
-            /* ── FLASHCARD MODE: original flip behavior ── */
             <>
               <button
                 onClick={() => setFlipped(f => !f)}
@@ -360,7 +354,6 @@ export default function CategoryPage() {
                 )}
               </button>
 
-              {/* Audio + Mic row — shown after flip */}
               {flipped && (
                 <div className="flex gap-2 justify-center">
                   <button
@@ -391,7 +384,6 @@ export default function CategoryPage() {
                 </div>
               )}
 
-              {/* Pronunciation feedback */}
               {assessment !== null && (
                 <div className="bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-center space-y-2">
                   {assessment.error ? (
@@ -425,7 +417,6 @@ export default function CategoryPage() {
                 </div>
               )}
 
-              {/* Mnemonic */}
               {currentPhrase?.mnemonic && (
                 <button
                   onClick={() => setShowMnemonic(m => !m)}
@@ -439,7 +430,6 @@ export default function CategoryPage() {
                 </button>
               )}
 
-              {/* Action buttons */}
               {flipped && (
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <button
