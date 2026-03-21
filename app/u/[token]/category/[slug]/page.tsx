@@ -208,7 +208,7 @@ export default function CategoryPage() {
           <div className="flex justify-end">
             <button
               onClick={handleStar}
-              className={`text-2xl transition-transform active:scale-90 ${starred.has(currentPhrase?.id) ? 'text-amber-400' : 'text-stone-600 hover:text-stone-400'}`}
+              className={`text-2xl transition-transform active:scale-90 ${starred.has(currentPhrase?.id) ? 'text-amber-400' : 'text-stone-400 hover:text-stone-200'}`}
               title={starred.has(currentPhrase?.id) ? 'Remove from Keepers' : 'Add to Keepers'}
             >
               {starred.has(currentPhrase?.id) ? '★' : '☆'}
